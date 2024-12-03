@@ -9,6 +9,11 @@
      If it is not one of the 5 target objects, there will be no prompt.
 */
 
+/*
+
+v7: Add a led indicator to sync with candles. (11/27)
+
+*/
 /* 
 v6: Add a 8 channel relay module to control light, cut the mp3 player, maglock
     Updating the compareUID function in order to compare difference tags with different UID size.
@@ -32,8 +37,8 @@ v4: Add reset function. Add one more card as a reset card to reset the program t
 
 // RFID reader number
 const uint8_t Num_Readers = 5;
-// Each RFID reader SS(SDA) pins
 
+// Each RFID reader SS(SDA) pins/////////
 //For Mega
 //const uint8_t ssPins[Num_Readers] = {38,36,34,32,30}; //The pin order must match the order of the targetUIDs array
 //const uint8_t rstPin = 22; // All readers share the common rst pin 
@@ -43,15 +48,6 @@ const uint8_t ssPins[Num_Readers] = {9,8,7,6,5}; //The pin order must match the 
 const uint8_t rstPin = 10; // All readers share the common rst pin 
 
 MFRC522 rfid[Num_Readers];
-
-// // Target UIDs for each reader（for 4 bytes UID, add 0x00 to 7 bytes)
-// byte targetUIDs[Num_Readers][7] = {
-//   {0x04, 0x34, 0xAB, 0xC5, 0x79, 0x00, 0x00},  // Reader 0 (7byte) Trophies
-//   {0xA1, 0xFD, 0x27, 0x03, 0x00, 0x00, 0x00},  // Reader 1 (4byte) Journal
-//   {0x04, 0x36, 0xAB, 0xC5, 0x79, 0x00, 0x00},  // Reader 2 (7byte) Amulet
-//   {0x04, 0xAA, 0xAA, 0xC5, 0x79, 0x00, 0x00},  // Reader 3 (7byte) Ring box
-//   {0x81, 0x46, 0x21, 0x03, 0x00, 0x00, 0x00}   // Reader 4 (4byte) Sheet Music
-// };
 
 // Target UIDs for each reader（for 4 bytes UID, add 0x00 to 7 bytes)
 byte targetUIDs[Num_Readers][7] = {
@@ -71,13 +67,13 @@ byte resetUID[7] = {0xF3, 0x9A, 0x2B, 0xAB, 0x00, 0x00, 0x00};
 const byte resetUIDLength = 4;
 
 // Define the LED pins
-// const uint8_t ledPins[] = {10, 9, 8, 7, 6}; // LEDs for each reader
+const uint8_t ledPins[Num_Readers] = {4, 3, 2, 19, 20}; // LEDs for management
 // const uint8_t ledResetPin = 5;     
 
 // Array to track if the correct card has been detected for each reader
 bool cardDetected[] = {false, false, false, false, false};
 
-//The pin order in relay modules：      IN8,IN7,IN6,IN5,IN4
+//The pin order in relay modules：      IN8,IN7,IN3,IN5,IN4
 const uint8_t relayPins[Num_Readers] = {A0, A1, A2, A3, A4};
 
 bool puzzleSolved = false;
@@ -95,10 +91,10 @@ void setup() {
   }
 
   //Initialize different LED pins as output and off
-  // for (uint8_t i = 0; i < Num_Readers; i++) {
-  //   pinMode(ledPins[i], OUTPUT); 
-  //   digitalWrite(ledPins[i], LOW); 
-  // }
+  for (uint8_t i = 0; i < Num_Readers; i++) {
+    pinMode(ledPins[i], OUTPUT); 
+    digitalWrite(ledPins[i], LOW); 
+  }
     // pinMode(ledResetPin, OUTPUT); 
     // digitalWrite(ledResetPin, LOW); 
 
@@ -130,15 +126,15 @@ void loop() {
   for (uint8_t reader = 0; reader < Num_Readers; reader++) {
     // Deactivate all readers
     for (uint8_t i = 0; i < Num_Readers; i++) {
-      digitalWrite(ssPins[i], HIGH);
-    }
+        digitalWrite(ssPins[i], HIGH);
+      }
     // Activate the current reader
     digitalWrite(ssPins[reader], LOW);
 
     // Small delay to allow the SPI bus to stabilize
     delay(10);
 
-    // Check for new cards
+    // Checking for new cards
     if (rfid[reader].PICC_IsNewCardPresent() && rfid[reader].PICC_ReadCardSerial()) {
       // Read UID
       byte* uid = rfid[reader].uid.uidByte;
@@ -152,7 +148,7 @@ void loop() {
         Serial.print(uid[i] < 0x10 ? " 0" : " ");
         Serial.print(uid[i], HEX);
       }
-        Serial.println();
+      Serial.println();
 
       // Compare detected UID with target UID
       if (compareUID(uid, uidSize, targetUIDs[reader], targetUIDLengths[reader])) {
@@ -161,9 +157,8 @@ void loop() {
         Serial.println(": Target item detected!");
 
         cardDetected[reader] = true;
-        //digitalWrite(ledPins[reader], HIGH);
+        digitalWrite(ledPins[reader], HIGH);
         digitalWrite(relayPins[reader], HIGH);
-
 
       } else if(compareUID(uid, uidSize, resetUID, resetUIDLength)) {
         Serial.println("Reset card detected! Reseting...");
@@ -196,33 +191,35 @@ void loop() {
     
     // Keep the LED on if the correct card was previously detected
     if (cardDetected[reader]) {
-      //digitalWrite(ledPins[reader], HIGH);
+      digitalWrite(ledPins[reader], HIGH);
       digitalWrite(relayPins[reader], HIGH);
     } else {
-      //digitalWrite(ledPins[reader], LOW);
+      digitalWrite(ledPins[reader], LOW);
       digitalWrite(relayPins[reader], LOW);
     }
   }
 
   if (allCorrectCardsDetected && !puzzleSolved ) {
     Serial.println("All correct tags detected!");
-    delay(2000);
+    delay(1000);
 
     //repeat the relay animation 3 times
     for(uint8_t repeat = 0; repeat < 3; repeat++){
       //start from the first relay
       for(uint8_t i = 0; i < Num_Readers; i++){
-
         digitalWrite(relayPins[i], HIGH);
+        digitalWrite(ledPins[i], HIGH);
         delay(50);
-        digitalWrite(relayPins[i], LOW);
+        digitalWrite(ledPins[i], LOW);
         delay(50);
       }
       //start from the last relay
       for (int i = Num_Readers - 1; i >=0; i--){
         digitalWrite(relayPins[i], HIGH);
+        digitalWrite(ledPins[i], HIGH);
         delay(50);
         digitalWrite(relayPins[i], LOW);
+        digitalWrite(ledPins[i], LOW);
         delay(50);
       }
 
@@ -256,12 +253,12 @@ bool compareUID(byte* uid1, byte uid1Size, byte* uid2, byte uid2Size) {
 void flashAllCandles(uint8_t times, unsigned long duration) {
   for (uint8_t t = 0; t < times; t++) {
     for (uint8_t i = 0; i < Num_Readers; i++) {
-      //digitalWrite(ledPins[i], HIGH);
+      digitalWrite(ledPins[i], HIGH);
       digitalWrite(relayPins[i],HIGH);
     }
       delay(duration);
     for (uint8_t i = 0; i < Num_Readers; i++) {
-      //digitalWrite(ledPins[i], LOW);
+      digitalWrite(ledPins[i], LOW);
       digitalWrite(relayPins[i], LOW);
     }
       delay(duration);
@@ -270,26 +267,11 @@ void flashAllCandles(uint8_t times, unsigned long duration) {
 
 /* ------------------Reset to Initial State---------------------*/
 void resetToInitialState() {
-
-  // //delay(500);
-
-  // for (uint8_t i = 0; i < Num_Readers; i++) {
-  //   digitalWrite(relayPins[i], LOW);
-  // }
-
-  // delay(500);  
-
-  // for (uint8_t i = 0; i < Num_Readers; i++) {
-  //   digitalWrite(relayPins[i], HIGH);
-  // }
-
-  // delay(1000);  
-  
   // reset all detected tags and cards to false
   for (uint8_t i = 0; i < Num_Readers; i++) {
 
     cardDetected[i] = false;
-    //digitalWrite(ledPins[i], LOW);
+    digitalWrite(ledPins[i], LOW);
     digitalWrite(relayPins[i], LOW);
 
   }
